@@ -86,7 +86,7 @@ function ImageCard({
       onClick={onImageSelect}
     >
       <div className="aspect-square relative">
-        {isLoading && <Skeleton className="absolute inset-0" />}
+        {isLoading && <Skeleton className="absolute inset-0 bg-neutral-700" />}
 
         <Image
           className={`w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 ${
