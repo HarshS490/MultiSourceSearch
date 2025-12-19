@@ -160,6 +160,19 @@ router.post(
             const uploaded = await uploadToDrive(userId, provider, req.file);
             console.log(`[${provider.toUpperCase()} UPLOAD RESPONSE]`, JSON.stringify(uploaded, null, 2));
 
+            // If no thumbnail was returned, try to fetch it explicitly
+            let thumbnailUrl = uploaded.thumbnail || null;
+            if (!thumbnailUrl) {
+                console.log(`No thumbnail in upload response, fetching explicitly...`);
+                const { getThumbnail } = await import("../utils/driveUtils.js");
+                
+                // Wait a moment for the drive to process the file
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                
+                thumbnailUrl = await getThumbnail(userId, provider, uploaded.id);
+                console.log(`Fetched thumbnail: ${thumbnailUrl ? 'SUCCESS' : 'FAILED'}`);
+            }
+
             const image = await prisma.images.create({
                 data: {
                     userId,
@@ -168,7 +181,7 @@ router.post(
                     fileId: uploaded.id,
                     fileName: fileName || req.file.originalname,
                     fileUrl: uploaded.url,
-                    thumbnailUrl: uploaded.thumbnail || null,
+                    thumbnailUrl,
                     uploadedAt: new Date(),
                 },
             });

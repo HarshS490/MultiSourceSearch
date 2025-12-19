@@ -84,7 +84,44 @@ export async function uploadToDrive(
             throw new Error(`OneDrive upload failed: ${uploadRes.statusText}`);
 
         const data = (await uploadRes.json()) as { id: string; webUrl: string };
-        return { id: data.id, url: data.webUrl };
+        
+        // Wait a moment for OneDrive to process the file
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // Fetch thumbnail
+        const result: { id: string; url: string; thumbnail?: string } = {
+            id: data.id,
+            url: data.webUrl,
+        };
+        
+        try {
+            const thumbnailRes = await fetch(
+                `https://graph.microsoft.com/v1.0/me/drive/items/${data.id}/thumbnails`,
+                {
+                    headers: {
+                        Authorization: `Bearer ${accessToken}`,
+                    },
+                }
+            );
+
+            if (thumbnailRes.ok) {
+                const thumbnailData = (await thumbnailRes.json()) as {
+                    value?: Array<{
+                        large?: { url: string };
+                        medium?: { url: string };
+                        small?: { url: string };
+                    }>;
+                };
+                const thumbnail = thumbnailData.value?.[0];
+                const thumbUrl = thumbnail?.large?.url || thumbnail?.medium?.url || thumbnail?.small?.url;
+                if (thumbUrl) result.thumbnail = thumbUrl;
+            }
+        } catch (error) {
+            console.error("Error fetching OneDrive thumbnail after upload:", error);
+        }
+        
+        console.log(`[ONEDRIVE UPLOAD RESPONSE]`, JSON.stringify(result, null, 2));
+        return result;
     }
 
     throw new Error("Unknown provider");
@@ -124,8 +161,37 @@ export async function getThumbnail(
 
     // ---------- OneDrive ----------
     if (provider === "onedrive") {
-        // OneDrive doesn't provide direct thumbnails easily
-        return null;
+        try {
+            // Fetch thumbnail URL from OneDrive
+            const thumbnailRes = await fetch(
+                `https://graph.microsoft.com/v1.0/me/drive/items/${fileId}/thumbnails`,
+                {
+                    headers: {
+                        Authorization: `Bearer ${accessToken}`,
+                    },
+                }
+            );
+
+            if (!thumbnailRes.ok) {
+                console.error("OneDrive thumbnail fetch failed:", thumbnailRes.statusText);
+                return null;
+            }
+
+            const thumbnailData = (await thumbnailRes.json()) as {
+                value?: Array<{
+                    large?: { url: string };
+                    medium?: { url: string };
+                    small?: { url: string };
+                }>;
+            };
+
+            // Return the largest available thumbnail
+            const thumbnail = thumbnailData.value?.[0];
+            return thumbnail?.large?.url || thumbnail?.medium?.url || thumbnail?.small?.url || null;
+        } catch (error) {
+            console.error("Error fetching OneDrive thumbnail:", error);
+            return null;
+        }
     }
 
     return null;
